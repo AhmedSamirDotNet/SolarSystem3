@@ -34,11 +34,12 @@ namespace SolarSystem.WebApi.Controllers
             }
 
             var claims = new[]
-            {
-                new Claim(ClaimTypes.Name, admin.Username),
-                new Claim(ClaimTypes.Role, admin.Role.ToString()),
-                new Claim("AdminId", admin.Id.ToString())
-            };
+{
+    new Claim(ClaimTypes.Name, admin.Username),
+    // هنا بنقوله: لو ملقتش اسم للرتبة، حط الرقم بتاعها كـ String عشان البرنامج ميفصلش
+    new Claim(ClaimTypes.Role, Enum.GetName(typeof(AdminRole), admin.Role) ?? admin.Role.ToString()),
+    new Claim("AdminId", admin.Id.ToString())
+};
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -38,7 +38,7 @@ namespace SolarSystem.WebApi.Controllers
 
         // 3. إنشاء قسم جديد (للأدمن فقط)
         [HttpPost]
-        [Authorize(Roles = "MasterAdmin,Editor")]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
         public IActionResult Create([FromBody] Section section)
         {
             if (!ModelState.IsValid)
@@ -53,7 +53,7 @@ namespace SolarSystem.WebApi.Controllers
 
         // 4. تحديث قسم موجود (للأدمن فقط)
         [HttpPut]
-        [Authorize(Roles = "MasterAdmin,Editor")]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
         public IActionResult Update([FromBody] Section section)
         {
             if (!ModelState.IsValid || section.Id <= 0)
@@ -75,7 +75,7 @@ namespace SolarSystem.WebApi.Controllers
 
         // 5. حذف قسم (للماستر أدمن فقط)
         [HttpDelete("{id}")]
-        [Authorize(Roles = "MasterAdmin")]
+        [Authorize(Roles = "MasterAdmin,3")]
         public IActionResult Delete(int id)
         {
             // نتحقق أولا إذا كان القسم يحتوي على منتجات مرتبطة به

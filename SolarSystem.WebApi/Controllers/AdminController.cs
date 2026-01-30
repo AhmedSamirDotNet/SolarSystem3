@@ -7,7 +7,7 @@ namespace SolarSystem.WebApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Roles = "MasterAdmin")]
+    [Authorize(Roles = "MasterAdmin,3")]
     public class AdminController : ControllerBase
     {
         private readonly IUnitOfWork _unitOfWork;

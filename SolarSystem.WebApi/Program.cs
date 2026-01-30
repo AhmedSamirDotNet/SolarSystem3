@@ -9,7 +9,7 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
+// إعداد الكنترولرز وحل مشكلة الـ JSON Cycles
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
@@ -17,13 +17,13 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 
 builder.Services.AddEndpointsApiExplorer();
 
-// CORS for development (adjust for production)
+// CORS للتطوير
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 });
 
-// Configure DbContext
+// إعداد DbContext
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
@@ -31,7 +31,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-// JWT Authentication
+// JWT Authentication Configuration
 var jwtSection = builder.Configuration.GetSection("Jwt");
 var jwtKey = jwtSection["Key"] ?? string.Empty;
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
@@ -56,7 +56,7 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Swagger with JWT support
+// Swagger مع دعم الـ JWT
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -87,6 +87,7 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// تفعيل Swagger في بيئة التطوير
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -95,7 +96,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseStaticFiles();
+// --- الإضافات الجديدة للفرونت إند ---
+app.UseDefaultFiles(); // <--- مضاف حديثاً: للبحث عن index.html تلقائياً
+app.UseStaticFiles();  // تفعيل الملفات الثابتة (CSS, JS, Images)
+// ----------------------------------
 
 app.UseRouting();
 
@@ -104,10 +108,13 @@ app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 
-
 app.MapControllers();
 
-// Apply pending EF Core migrations automatically at startup (ensure DB connection is correct)
+// --- الإضافات الجديدة للروتنج ---
+app.MapFallbackToFile("index.html"); // <--- مضاف حديثاً: لتوجيه أي مسار غير معروف للفرونت إند
+// ----------------------------------
+
+// تطبيق الـ Migrations تلقائياً عند التشغيل
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

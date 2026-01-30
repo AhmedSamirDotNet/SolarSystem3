@@ -68,7 +68,7 @@ namespace SolarSystem.WebApi.Controllers
 
         // 3. إضافة منتج جديد مع رفع الصور
         [HttpPost]
-        [Authorize(Roles = "MasterAdmin,Editor")]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
         public IActionResult Create([FromForm] Product product, List<IFormFile> files)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -87,7 +87,7 @@ namespace SolarSystem.WebApi.Controllers
 
         // 4. تحديث المنتج
         [HttpPut]
-        [Authorize(Roles = "MasterAdmin,Editor")]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
         public IActionResult Update([FromForm] Product product, List<IFormFile> files)
         {
             if (!ModelState.IsValid || product.Id <= 0) return BadRequest("بيانات غير صالحة.");
@@ -108,7 +108,7 @@ namespace SolarSystem.WebApi.Controllers
 
         // 5. حذف صورة واحدة محددة (مهمة للداشبورد)
         [HttpDelete("DeleteImage/{imageId}")]
-        [Authorize(Roles = "MasterAdmin,Editor")]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
         public IActionResult DeleteImage(int imageId)
         {
             var image = _unitOfWork.Image.Get(u => u.Id == imageId);
@@ -124,7 +124,7 @@ namespace SolarSystem.WebApi.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "MasterAdmin")]
+        [Authorize(Roles = "MasterAdmin,3")]
         public IActionResult Delete(int id)
         {
             var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images");
