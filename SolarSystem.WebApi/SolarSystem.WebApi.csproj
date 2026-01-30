@@ -20,10 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Controllers\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\SolarSystem.DataAccess1\SolarSystem.DataAccess1.csproj" />
   </ItemGroup>
 
