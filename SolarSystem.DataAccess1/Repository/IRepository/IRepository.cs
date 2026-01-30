@@ -13,8 +13,6 @@ namespace SolarSystem.DataAccess1.Repository.IRepository
         T Get(Expression<Func<T, bool>>? Filter = null, string? includeProperties = null, bool tracked = false);
         void Add(T entity);
 
-        //  void Update(T entity);
-
         void Remove(T entity);
 
         void RemoveRange(IEnumerable<T> entities);
