@@ -20,7 +20,7 @@ namespace SolarSystem.WebApi.Controllers
         }
 
         [HttpGet]
-        public IActionResult GetAll(int? sectionId, int pageNumber = 1, int pageSize = 10)
+        public IActionResult GetAll(int? sectionId, int pageNumber = 1, int pageSize = 10, [FromQuery] string lang = "en")
         {
             // التحقق من صحة أرقام الصفحات
             if (pageNumber < 1) pageNumber = 1;
@@ -33,11 +33,11 @@ namespace SolarSystem.WebApi.Controllers
             {
                 productList = _unitOfWork.Product.GetAll(
                     u => u.SectionId == sectionId,
-                    includeProperties: "Images");
+                    includeProperties: "Images,Translations");
             }
             else
             {
-                productList = _unitOfWork.Product.GetAll(includeProperties: "Images");
+                productList = _unitOfWork.Product.GetAll(includeProperties: "Images,Translations");
             }
 
             int totalCount = productList.Count();
@@ -47,9 +47,22 @@ namespace SolarSystem.WebApi.Controllers
                 .Take(pageSize)
                 .ToList();
 
-            var response = new PagedResult<Product>
+            // Map to language-aware DTO
+            var items = pagedData.Select(p => new
             {
-                Items = pagedData,
+                p.Id,
+                Name = p.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.Name
+                       ?? p.Translations.FirstOrDefault()?.Name,
+                MainDesc = p.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.MainDesc,
+                SubDesc = p.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.SubDesc,
+                p.Price,
+                p.SectionId,
+                Images = p.Images
+            }).ToList();
+
+            var response = new PagedResult<object>
+            {
+                Items = items,
                 TotalCount = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -59,11 +72,45 @@ namespace SolarSystem.WebApi.Controllers
         }
 
         [HttpGet("{id}")]
-        public IActionResult Details(int id)
+        public IActionResult Details(int id, [FromQuery] string lang = "en")
         {
-            var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images,Section");
+            var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images,Section,Translations");
             if (product == null) return NotFound("المنتج غير موجود.");
-            return Ok(product);
+
+            var dto = new
+            {
+                product.Id,
+                Name = product.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.Name
+                       ?? product.Translations.FirstOrDefault()?.Name,
+                MainDesc = product.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.MainDesc,
+                SubDesc = product.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.SubDesc,
+                product.Price,
+                product.SectionId,
+                product.Images
+            };
+
+            return Ok(dto);
+        }
+
+        // Translation endpoints
+        [HttpPost("{productId}/translation")]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
+        public IActionResult AddTranslation(int productId, [FromBody] ProductTranslation translation)
+        {
+            if (translation == null || translation.ProductId != productId) return BadRequest();
+            _unitOfWork.ProductTranslation.Add(translation);
+            _unitOfWork.Save();
+            return Ok(translation);
+        }
+
+        [HttpPut("translation")]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
+        public IActionResult UpdateTranslation([FromBody] ProductTranslation translation)
+        {
+            if (translation == null || translation.Id <= 0) return BadRequest();
+            _unitOfWork.ProductTranslation.Update(translation);
+            _unitOfWork.Save();
+            return Ok(translation);
         }
 
         // 3. إضافة منتج جديد مع رفع الصور

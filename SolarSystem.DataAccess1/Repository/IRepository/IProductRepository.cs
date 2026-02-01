@@ -3,8 +3,8 @@
 
 namespace SolarSystem.DataAccess1.Repository.IRepository
 {
-    public interface IProductRepository : IRepository<Models1.Models.Product>
+    public interface IProductRepository : IRepository<Product>
     {
-        void Update(Models1.Models.Product entity);
+        void Update(Product entity);
     }
 }

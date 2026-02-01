@@ -18,10 +18,19 @@ namespace SolarSystem.WebApi.Controllers
 
         // 1. عرض جميع الأقسام (متاح للجميع)
         [HttpGet]
-        public IActionResult GetAll()
+        public IActionResult GetAll([FromQuery] string lang = "en")
         {
-            var sections = _unitOfWork.Section.GetAll();
-            return Ok(sections);
+            var sections = _unitOfWork.Section.GetAll(includeProperties: "Translations");
+
+            // Map to language-specific DTOs
+            var result = sections.Select(s => new
+            {
+                s.Id,
+                Name = s.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.Name
+                       ?? s.Translations.FirstOrDefault()?.Name
+            });
+
+            return Ok(result);
         }
 
         // 2. عرض تفاصيل قسم معين مع المنتجات التابعة له
@@ -46,6 +55,15 @@ namespace SolarSystem.WebApi.Controllers
                 return BadRequest(ModelState);
             }
 
+            // If translations were provided, ensure at least a default translation exists
+            if (section.Translations == null || !section.Translations.Any())
+            {
+                section.Translations = new List<SectionTranslation>
+                {
+                    new SectionTranslation { LanguageCode = "en", Name = "New Section" }
+                };
+            }
+
             _unitOfWork.Section.Add(section);
             _unitOfWork.Save();
             return Ok(new { message = "تم إنشاء القسم بنجاح", sectionId = section.Id });
@@ -65,6 +83,22 @@ namespace SolarSystem.WebApi.Controllers
             if (sectionFromDb == null)
             {
                 return NotFound(new { message = "القسم غير موجود لتحديثه" });
+            }
+
+            // Update translations if provided
+            if (section.Translations != null && section.Translations.Any())
+            {
+                foreach (var tr in section.Translations)
+                {
+                    if (tr.Id == 0)
+                    {
+                        _unitOfWork.SectionTranslation.Add(tr);
+                    }
+                    else
+                    {
+                        _unitOfWork.SectionTranslation.Update(tr);
+                    }
+                }
             }
 
             _unitOfWork.Section.Update(section);

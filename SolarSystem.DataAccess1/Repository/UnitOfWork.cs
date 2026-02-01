@@ -10,6 +10,8 @@ namespace SolarSystem.DataAccess1.Repository
         public IProductRepository Product { get; private set; }
         public IImageRepository Image { get; private set; }
         public ISectionRepository Section { get; private set; }
+        public IProductTranslationRepository ProductTranslation { get; private set; }
+        public ISectionTranslationRepository SectionTranslation { get; private set; }
         public IAdminRepository Admin { get; private set; }
 
         public UnitOfWork(ApplicationDbContext db)
@@ -19,6 +21,8 @@ namespace SolarSystem.DataAccess1.Repository
             Product = new ProductRepository(_db);
             Image = new ImageRepository(_db);
             Section = new SectionRepository(_db);
+            ProductTranslation = new ProductTranslationRepository(_db);
+            SectionTranslation = new SectionTranslationRepository(_db);
             Admin = new AdminRepository(_db);
         }
 

@@ -16,7 +16,12 @@ namespace SolarSystem.DataAccess1.Repository
             var objFromDb = _db.Sections.FirstOrDefault(s => s.Id == entity.Id);
             if (objFromDb != null)
             {
-                objFromDb.Name = entity.Name;
+                // Keep translations unchanged here; Translations are managed separately
+                // If english translation exists as default, ensure there's at least one translation
+                if (entity.Translations != null && entity.Translations.Any())
+                {
+                    // ensure translations collection is synchronized by caller
+                }
             }
         }
     }

@@ -22,11 +22,11 @@ namespace SolarSystem.DataAccess1.Repository
             var objFromDb = _db.Products.FirstOrDefault(p => p.Id == entity.Id);
             if (objFromDb != null)
             {
-                objFromDb.Name = entity.Name;
-                objFromDb.MainDesc = entity.MainDesc;
-                objFromDb.SubDesc = entity.SubDesc;
+                // Core product fields
+                objFromDb.Price = entity.Price;
                 objFromDb.Price = entity.Price;
                 objFromDb.SectionId = entity.SectionId;
+                // Name/MainDesc/SubDesc are provided by translations in ProductTranslation table.
                 // الصور بنحدثها لوحدها في الـ Controller عشان فيها شغل Files 📁
             }
         }

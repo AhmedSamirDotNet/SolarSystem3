@@ -7,6 +7,8 @@ namespace SolarSystem.DataAccess1.Repository.IRepository
         IProductRepository Product { get; }
         IImageRepository Image { get; }
         ISectionRepository Section { get; }
+        IProductTranslationRepository ProductTranslation { get; }
+        ISectionTranslationRepository SectionTranslation { get; }
         IAdminRepository Admin { get; }
 
         void Save(); // هي دي اللي بتعمل DbContext.SaveChanges()
