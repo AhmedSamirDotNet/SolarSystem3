@@ -13,6 +13,12 @@ namespace SolarSystem.DataAccess1.Repository
         public IProductTranslationRepository ProductTranslation { get; private set; }
         public ISectionTranslationRepository SectionTranslation { get; private set; }
         public IAdminRepository Admin { get; private set; }
+        public IProjectHomePageCardRepository ProjectCard { get; private set; }
+        public IProjectCardTranslationRepository ProjectCardTranslation { get; private set; }
+        public ICustomerRepository Customer { get; private set; }
+        public ICustomerFeedbackRepository CustomerFeedback { get; private set; }
+        public ICustomerTranslationRepository CustomerTranslation { get; private set; }
+        public ICustomerFeedbackTranslationRepository CustomerFeedbackTranslation { get; private set; }
 
         public UnitOfWork(ApplicationDbContext db)
         {
@@ -24,11 +30,22 @@ namespace SolarSystem.DataAccess1.Repository
             ProductTranslation = new ProductTranslationRepository(_db);
             SectionTranslation = new SectionTranslationRepository(_db);
             Admin = new AdminRepository(_db);
+            ProjectCard = new ProjectHomePageCardRepository(_db);
+            ProjectCardTranslation = new ProjectCardTranslationRepository(_db);
+            Customer = new CustomerRepository(_db);
+            CustomerFeedback = new CustomerFeedbackRepository(_db);
+            CustomerTranslation = new CustomerTranslationRepository(_db);
+            CustomerFeedbackTranslation = new CustomerFeedbackTranslationRepository(_db);
         }
 
         public void Save()
         {
             _db.SaveChanges();
+        }
+
+        public async Task SaveAsync()
+        {
+            await _db.SaveChangesAsync();
         }
 
         public void Dispose()

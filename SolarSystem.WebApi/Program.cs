@@ -1,124 +1,147 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using SolarSystem.DataAccess1;
 using SolarSystem.DataAccess1.Repository;
 using SolarSystem.DataAccess1.Repository.IRepository;
-using System.Text.Json.Serialization;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// إعداد الكنترولرز وحل مشكلة الـ JSON Cycles
-builder.Services.AddControllers().AddJsonOptions(options =>
-{
-    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-});
+#region Controllers & JSON
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    });
+#endregion
 
-builder.Services.AddEndpointsApiExplorer();
-
-// CORS للتطوير
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-});
-
-// إعداد DbContext
+#region Database
+var connString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.UseSqlServer(connString);
 });
+#endregion
 
+#region Unit Of Work
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+#endregion
 
-// JWT Authentication Configuration
+#region JWT Authentication
 var jwtSection = builder.Configuration.GetSection("Jwt");
-var jwtKey = jwtSection["Key"] ?? string.Empty;
-var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
+var jwtKey = jwtSection["Key"]
+    ?? "SolarSystem_Secret_Key_2026_Secure_Ahmed_Mohamed_@589987123k";
 
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSection["Issuer"],
-        ValidAudience = jwtSection["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
-        ClockSkew = System.TimeSpan.Zero
-    };
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSection["Issuer"] ?? "SolarSystemApi",
+            ValidAudience = jwtSection["Audience"] ?? "SolarSystemClient",
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtKey)
+            ),
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+#endregion
+
+#region CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
 });
+#endregion
 
-// Swagger مع دعم الـ JWT
-builder.Services.AddSwaggerGen(options =>
+#region Swagger (Safe for Deployment)
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
 {
-    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "Enter your JWT token (Bearer token only)"
+        Title = "Solar System API",
+        Version = "v1",
+        Description = "Solar System Backend API"
     });
 
-    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    // JWT Support in Swagger
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter: Bearer {your JWT token}"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            new OpenApiSecurityScheme
             {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                Reference = new OpenApiReference
                 {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Type = ReferenceType.SecurityScheme,
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            Array.Empty<string>()
         }
     });
 });
+#endregion
 
 var app = builder.Build();
 
-// تفعيل Swagger في بيئة التطوير
+#region Middleware Pipeline
+
 if (app.Environment.IsDevelopment())
 {
+    app.UseDeveloperExceptionPage();
+
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Solar System API v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
-app.UseHttpsRedirection();
-
-// --- الإضافات الجديدة للفرونت إند ---
-app.UseDefaultFiles(); // <--- مضاف حديثاً: للبحث عن index.html تلقائياً
-app.UseStaticFiles();  // تفعيل الملفات الثابتة (CSS, JS, Images)
-// ----------------------------------
+app.UseStaticFiles();
 
 app.UseRouting();
 
-app.UseCors("AllowAll");
+app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-// --- الإضافات الجديدة للروتنج ---
-app.MapFallbackToFile("index.html"); // <--- مضاف حديثاً: لتوجيه أي مسار غير معروف للفرونت إند
-// ----------------------------------
+app.MapGet("/", () => "Solar System API is Running...");
 
-// تطبيق الـ Migrations تلقائياً عند التشغيل
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.Migrate();
-}
+#endregion
 
 app.Run();
+
+//"ConnectionStrings": {
+//    "DefaultConnection": "Server=db40129.databaseasp.net;Database=db40129;User Id=db40129;Password=4t!Wh#R5-X6z;Encrypt=False;MultipleActiveResultSets=True;"
+//  }
+
+//"ConnectionStrings": {
+//    "DefaultConnection": "Server=db40129.databaseasp.net;Database=db40129;User Id=db40129;Password=4t!Wh#R5-X6z;Encrypt=False;MultipleActiveResultSets=True;"
+//  },

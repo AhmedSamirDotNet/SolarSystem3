@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using SolarSystem.DataAccess1.Repository.IRepository;
 using SolarSystem.Models1.Models;
+using SolarSystem.Models1.Dtos;
+using SolarSystem.Models1.Extensions;
 
 namespace SolarSystem.WebApi.Controllers
 {
@@ -16,120 +18,142 @@ namespace SolarSystem.WebApi.Controllers
             _unitOfWork = unitOfWork;
         }
 
-        // 1. عرض جميع الأقسام (متاح للجميع)
+        // عرض جميع الأقسام (متاح للجميع)
         [HttpGet]
         public IActionResult GetAll([FromQuery] string lang = "en")
         {
             var sections = _unitOfWork.Section.GetAll(includeProperties: "Translations");
-
-            // Map to language-specific DTOs
-            var result = sections.Select(s => new
-            {
-                s.Id,
-                Name = s.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.Name
-                       ?? s.Translations.FirstOrDefault()?.Name
-            });
-
+            var result = sections.ToDtoList(lang);
             return Ok(result);
         }
 
-        // 2. عرض تفاصيل قسم معين مع المنتجات التابعة له
+        // عرض تفاصيل قسم معين مع المنتجات التابعة له
         [HttpGet("{id}")]
-        public IActionResult GetById(int id)
+        public IActionResult GetById(int id, [FromQuery] string lang = "en")
         {
-            var section = _unitOfWork.Section.Get(u => u.Id == id, includeProperties: "Products");
+            var section = _unitOfWork.Section.Get(u => u.Id == id, includeProperties: "Translations");
             if (section == null)
             {
-                return NotFound(new { message = "القسم غير موجود" });
+                return NotFound(new ErrorResponseDto { Message = "القسم غير موجود" });
             }
-            return Ok(section);
+            return Ok(section.ToDto(lang));
         }
 
-        // 3. إنشاء قسم جديد (للأدمن فقط)
+        // إنشاء قسم جديد (للأدمن فقط)
         [HttpPost]
-        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
-        public IActionResult Create([FromBody] Section section)
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
+        public IActionResult Create([FromBody] CreateSectionDto createDto)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto { Message = "بيانات القسم غير صالحة", Errors = ModelState.Values.SelectMany(v => v.Errors).GroupBy(e => "validation").ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray()) });
             }
 
-            // If translations were provided, ensure at least a default translation exists
-            if (section.Translations == null || !section.Translations.Any())
-            {
-                section.Translations = new List<SectionTranslation>
-                {
-                    new SectionTranslation { LanguageCode = "en", Name = "New Section" }
-                };
-            }
-
+            var section = new Section();
             _unitOfWork.Section.Add(section);
             _unitOfWork.Save();
-            return Ok(new { message = "تم إنشاء القسم بنجاح", sectionId = section.Id });
-        }
 
-        // 4. تحديث قسم موجود (للأدمن فقط)
-        [HttpPut]
-        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
-        public IActionResult Update([FromBody] Section section)
-        {
-            if (!ModelState.IsValid || section.Id <= 0)
+            // Create English translation
+            var enTranslation = new SectionTranslation
             {
-                return BadRequest(new { message = "بيانات القسم غير صالحة" });
-            }
+                LanguageCode = "en",
+                Name = createDto.NameEn!,
+                SectionId = section.Id
+            };
+            _unitOfWork.SectionTranslation.Add(enTranslation);
 
-            var sectionFromDb = _unitOfWork.Section.Get(u => u.Id == section.Id);
-            if (sectionFromDb == null)
+            // Create Arabic translation
+            var arTranslation = new SectionTranslation
             {
-                return NotFound(new { message = "القسم غير موجود لتحديثه" });
-            }
+                LanguageCode = "ar",
+                Name = createDto.NameAr!,
+                SectionId = section.Id
+            };
+            _unitOfWork.SectionTranslation.Add(arTranslation);
 
-            // Update translations if provided
-            if (section.Translations != null && section.Translations.Any())
-            {
-                foreach (var tr in section.Translations)
-                {
-                    if (tr.Id == 0)
-                    {
-                        _unitOfWork.SectionTranslation.Add(tr);
-                    }
-                    else
-                    {
-                        _unitOfWork.SectionTranslation.Update(tr);
-                    }
-                }
-            }
-
-            _unitOfWork.Section.Update(section);
             _unitOfWork.Save();
 
-            return Ok(new { message = "تم تحديث القسم بنجاح" });
+            return Ok(new SuccessResponseDto { Message = "تم إنشاء القسم بنجاح", Data = new { sectionId = section.Id } });
         }
 
-        // 5. حذف قسم (للماستر أدمن فقط)
+        // تحديث قسم موجود (للأدمن فقط)
+        [HttpPut]
+        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
+        public IActionResult Update([FromBody] UpdateSectionDto updateDto)
+        {
+            if (!ModelState.IsValid || updateDto.Id <= 0)
+            {
+                return BadRequest(new ErrorResponseDto { Message = "بيانات القسم غير صالحة" });
+            }
+
+            var sectionFromDb = _unitOfWork.Section.Get(u => u.Id == updateDto.Id, includeProperties: "Translations");
+            if (sectionFromDb == null)
+            {
+                return NotFound(new ErrorResponseDto { Message = "القسم غير موجود لتحديثه" });
+            }
+
+            // Update English translation
+            var enTranslation = sectionFromDb.Translations?.FirstOrDefault(t => t.LanguageCode == "en");
+            if (enTranslation != null)
+            {
+                enTranslation.Name = updateDto.NameEn!;
+                _unitOfWork.SectionTranslation.Update(enTranslation);
+            }
+            else
+            {
+                var newEnTranslation = new SectionTranslation
+                {
+                    LanguageCode = "en",
+                    Name = updateDto.NameEn!,
+                    SectionId = sectionFromDb.Id
+                };
+                _unitOfWork.SectionTranslation.Add(newEnTranslation);
+            }
+
+            // Update Arabic translation
+            var arTranslation = sectionFromDb.Translations?.FirstOrDefault(t => t.LanguageCode == "ar");
+            if (arTranslation != null)
+            {
+                arTranslation.Name = updateDto.NameAr!;
+                _unitOfWork.SectionTranslation.Update(arTranslation);
+            }
+            else
+            {
+                var newArTranslation = new SectionTranslation
+                {
+                    LanguageCode = "ar",
+                    Name = updateDto.NameAr!,
+                    SectionId = sectionFromDb.Id
+                };
+                _unitOfWork.SectionTranslation.Add(newArTranslation);
+            }
+
+            _unitOfWork.Save();
+
+            return Ok(new SuccessResponseDto { Message = "تم تحديث القسم بنجاح" });
+        }
+
+        // حذف قسم (للماستر أدمن فقط)
         [HttpDelete("{id}")]
-        [Authorize(Roles = "MasterAdmin,3")]
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
         public IActionResult Delete(int id)
         {
-            // نتحقق أولا إذا كان القسم يحتوي على منتجات مرتبطة به
             var section = _unitOfWork.Section.Get(u => u.Id == id, includeProperties: "Products");
 
             if (section == null)
             {
-                return NotFound(new { message = "القسم غير موجود" });
+                return NotFound(new ErrorResponseDto { Message = "القسم غير موجود" });
             }
 
-            // منطق أمان: منع حذف القسم إذا كان يحتوي على منتجات لتجنب مشاكل الربط
             if (section.Products != null && section.Products.Any())
             {
-                return BadRequest(new { message = "لا يمكن حذف قسم يحتوي على منتجات مرتبطة. قم بنقل أو حذف المنتجات أولاً." });
+                return BadRequest(new ErrorResponseDto { Message = "لا يمكن حذف قسم يحتوي على منتجات مرتبطة." });
             }
 
             _unitOfWork.Section.Remove(section);
             _unitOfWork.Save();
 
-            return Ok(new { message = "تم حذف القسم بنجاح" });
+            return Ok(new SuccessResponseDto { Message = "تم حذف القسم بنجاح" });
         }
     }
 }

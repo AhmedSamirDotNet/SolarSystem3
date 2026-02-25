@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using SolarSystem.DataAccess1.Repository.IRepository;
 using SolarSystem.Models1.Helpers;
 using SolarSystem.Models1.Models;
+using SolarSystem.Models1.Dtos;
+using SolarSystem.Models1.Extensions;
+using System.Text.Json;
 
 namespace SolarSystem.WebApi.Controllers
 {
@@ -19,16 +22,23 @@ namespace SolarSystem.WebApi.Controllers
             _webHostEnvironment = webHostEnvironment;
         }
 
+        [HttpGet("full/{id}")]
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
+        public IActionResult GetFull(int id)
+        {
+            var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images,Section,Translations");
+            if (product == null) return NotFound(new ErrorResponseDto { Message = "Product not found" });
+            return Ok(product.ToDetailDto());
+        }
+
         [HttpGet]
         public IActionResult GetAll(int? sectionId, int pageNumber = 1, int pageSize = 10, [FromQuery] string lang = "en")
         {
-            // التحقق من صحة أرقام الصفحات
             if (pageNumber < 1) pageNumber = 1;
             if (pageSize < 1) pageSize = 10;
 
             IEnumerable<Product> productList;
 
-            // الفلترة بناءً على وجود القسم
             if (sectionId != null && sectionId > 0)
             {
                 productList = _unitOfWork.Product.GetAll(
@@ -47,20 +57,10 @@ namespace SolarSystem.WebApi.Controllers
                 .Take(pageSize)
                 .ToList();
 
-            // Map to language-aware DTO
-            var items = pagedData.Select(p => new
-            {
-                p.Id,
-                Name = p.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.Name
-                       ?? p.Translations.FirstOrDefault()?.Name,
-                MainDesc = p.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.MainDesc,
-                SubDesc = p.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.SubDesc,
-                p.Price,
-                p.SectionId,
-                Images = p.Images
-            }).ToList();
+            // Map to language-aware DTO using extensions
+            var items = pagedData.Select(p => p.ToDto(lang)).ToList();
 
-            var response = new PagedResult<object>
+            var response = new ProductPagedResponseDto
             {
                 Items = items,
                 TotalCount = totalCount,
@@ -75,51 +75,42 @@ namespace SolarSystem.WebApi.Controllers
         public IActionResult Details(int id, [FromQuery] string lang = "en")
         {
             var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images,Section,Translations");
-            if (product == null) return NotFound("المنتج غير موجود.");
+            if (product == null) return NotFound(new ErrorResponseDto { Message = "المنتج غير موجود." });
 
-            var dto = new
-            {
-                product.Id,
-                Name = product.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.Name
-                       ?? product.Translations.FirstOrDefault()?.Name,
-                MainDesc = product.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.MainDesc,
-                SubDesc = product.Translations.FirstOrDefault(t => t.LanguageCode == lang)?.SubDesc,
-                product.Price,
-                product.SectionId,
-                product.Images
-            };
-
-            return Ok(dto);
+            return Ok(product.ToDto(lang));
         }
 
         // Translation endpoints
         [HttpPost("{productId}/translation")]
-        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
-        public IActionResult AddTranslation(int productId, [FromBody] ProductTranslation translation)
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
+        public IActionResult AddTranslation(int productId, [FromBody] ProductTranslationDto translationDto)
         {
-            if (translation == null || translation.ProductId != productId) return BadRequest();
+            if (translationDto == null || translationDto.ProductId != productId) return BadRequest(new ErrorResponseDto { Message = "Invalid translation data" });
+            var translation = translationDto.ToModel();
             _unitOfWork.ProductTranslation.Add(translation);
             _unitOfWork.Save();
-            return Ok(translation);
+            return Ok(translation.ToDto());
         }
 
         [HttpPut("translation")]
-        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
-        public IActionResult UpdateTranslation([FromBody] ProductTranslation translation)
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
+        public IActionResult UpdateTranslation([FromBody] ProductTranslationDto translationDto)
         {
-            if (translation == null || translation.Id <= 0) return BadRequest();
+            if (translationDto == null || translationDto.Id <= 0) return BadRequest(new ErrorResponseDto { Message = "Invalid translation data" });
+            var translation = translationDto.ToModel();
             _unitOfWork.ProductTranslation.Update(translation);
             _unitOfWork.Save();
-            return Ok(translation);
+            return Ok(translation.ToDto());
         }
 
-        // 3. إضافة منتج جديد مع رفع الصور
+        // إضافة منتج جديد مع رفع الصور
         [HttpPost]
-        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
-        public IActionResult Create([FromForm] Product product, List<IFormFile> files)
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
+        public IActionResult Create([FromForm] CreateProductDto createDto, [FromForm] string? TranslationsJson, List<IFormFile> files)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
+            var product = createDto.ToModel();
             _unitOfWork.Product.Add(product);
             _unitOfWork.Save(); 
 
@@ -129,70 +120,145 @@ namespace SolarSystem.WebApi.Controllers
                 _unitOfWork.Save();
             }
 
-            return Ok(new { message = "تمت إضافة المنتج بنجاح", productId = product.Id });
+            // Parse translations JSON if provided (multipart/form-data sends it as string)
+            bool translationsCreated = false;
+            if (!string.IsNullOrWhiteSpace(TranslationsJson))
+            {
+                try
+                {
+                    var translations = JsonSerializer.Deserialize<List<ProductTranslationDto>>(TranslationsJson);
+                    if (translations != null && translations.Count > 0)
+                    {
+                        foreach (var tr in translations)
+                        {
+                            var translation = tr.ToModel();
+                            translation.ProductId = product.Id;
+                            _unitOfWork.ProductTranslation.Add(translation);
+                        }
+                        _unitOfWork.Save();
+                        translationsCreated = true;
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Log error but don't fail - create default translations instead
+                }
+            }
+
+            // If no translations provided or parsing failed, create default EN/AR translations
+            if (!translationsCreated)
+            {
+                var enTranslation = new ProductTranslation
+                {
+                    LanguageCode = "en",
+                    Name = "Product",
+                    MainDesc = string.Empty,
+                    SubDesc = string.Empty,
+                    ProductId = product.Id
+                };
+                _unitOfWork.ProductTranslation.Add(enTranslation);
+
+                var arTranslation = new ProductTranslation
+                {
+                    LanguageCode = "ar",
+                    Name = "منتج",
+                    MainDesc = string.Empty,
+                    SubDesc = string.Empty,
+                    ProductId = product.Id
+                };
+                _unitOfWork.ProductTranslation.Add(arTranslation);
+                _unitOfWork.Save();
+            }
+
+            return Ok(new SuccessResponseDto { Message = "تمت إضافة المنتج بنجاح", Data = new { productId = product.Id } });
         }
 
-        // 4. تحديث المنتج
+        // تحديث المنتج
         [HttpPut]
-        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
-        public IActionResult Update([FromForm] Product product, List<IFormFile> files)
+        [AllowAnonymous]
+        public IActionResult Update([FromForm] UpdateProductDto updateDto, [FromForm] string? TranslationsJson, List<IFormFile> files)
         {
-            if (!ModelState.IsValid || product.Id <= 0) return BadRequest("بيانات غير صالحة.");
+            if (!ModelState.IsValid || updateDto.Id <= 0) return BadRequest(new ErrorResponseDto { Message = "بيانات غير صالحة." });
 
-            var objFromDb = _unitOfWork.Product.Get(u => u.Id == product.Id);
-            if (objFromDb == null) return NotFound("المنتج غير موجود.");
+            var objFromDb = _unitOfWork.Product.Get(u => u.Id == updateDto.Id, includeProperties: "Translations");
+            if (objFromDb == null) return NotFound(new ErrorResponseDto { Message = "المنتج غير موجود." });
 
-            _unitOfWork.Product.Update(product);
+            objFromDb.UpdateFromDto(updateDto);
+            _unitOfWork.Product.Update(objFromDb);
+
+            if (!string.IsNullOrWhiteSpace(TranslationsJson))
+            {
+                try
+                {
+                    var translations = JsonSerializer.Deserialize<List<ProductTranslationDto>>(TranslationsJson);
+                    if (translations != null)
+                    {
+                        foreach (var tr in translations)
+                        {
+                            var translation = tr.ToModel();
+                            translation.ProductId = updateDto.Id;
+                            if (tr.Id == 0)
+                                _unitOfWork.ProductTranslation.Add(translation);
+                            else
+                                _unitOfWork.ProductTranslation.Update(translation);
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // ignore invalid translations JSON
+                }
+            }
 
             if (files != null && files.Count > 0)
             {
-                HandleImageUpload(product.Id, files);
+                HandleImageUpload(updateDto.Id, files);
             }
 
             _unitOfWork.Save();
-            return Ok(new { message = "تم تحديث بيانات المنتج بنجاح" });
+            return Ok(new SuccessResponseDto { Message = "تم تحديث بيانات المنتج بنجاح" });
         }
 
-        // 5. حذف صورة واحدة محددة (مهمة للداشبورد)
+        // حذف صورة واحدة محددة (مهمة للداشبورد)
         [HttpDelete("DeleteImage/{imageId}")]
-        [Authorize(Roles = "MasterAdmin,Editor,3,2")]
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
         public IActionResult DeleteImage(int imageId)
         {
             var image = _unitOfWork.Image.Get(u => u.Id == imageId);
-            if (image == null) return NotFound("الصورة غير موجودة.");
+            if (image == null) return NotFound(new ErrorResponseDto { Message = "الصورة غير موجودة." });
 
-            string filePath = Path.Combine(_webHostEnvironment.WebRootPath, image.RelativePath.TrimStart('\\'));
+            string filePath = Path.Combine(_webHostEnvironment.WebRootPath, image.RelativePath.TrimStart('/'));
             if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath);
 
             _unitOfWork.Image.Remove(image);
             _unitOfWork.Save();
 
-            return Ok(new { message = "تم حذف الصورة بنجاح" });
+            return Ok(new SuccessResponseDto { Message = "تم حذف الصورة بنجاح" });
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "MasterAdmin,3")]
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
         public IActionResult Delete(int id)
         {
             var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images");
-            if (product == null) return NotFound();
+            if (product == null) return NotFound(new ErrorResponseDto { Message = "Product not found" });
 
             foreach (var img in product.Images)
             {
-                string filePath = Path.Combine(_webHostEnvironment.WebRootPath, img.RelativePath.TrimStart('\\'));
+                string filePath = Path.Combine(_webHostEnvironment.WebRootPath, img.RelativePath.TrimStart('/'));
                 if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath);
             }
 
             _unitOfWork.Product.Remove(product);
             _unitOfWork.Save();
 
-            return Ok(new { message = "تم حذف المنتج وكافة الملفات المرتبطة به" });
+            return Ok(new SuccessResponseDto { Message = "تم حذف المنتج وكافة الملفات المرتبطة به" });
         }
 
         private void HandleImageUpload(int productId, List<IFormFile> files)
         {
             string wwwRootPath = _webHostEnvironment.WebRootPath;
-            string productPath = Path.Combine(wwwRootPath, @"images");
+            string productPath = Path.Combine(wwwRootPath, "images");
 
             if (!Directory.Exists(productPath)) Directory.CreateDirectory(productPath);
 
@@ -206,7 +272,7 @@ namespace SolarSystem.WebApi.Controllers
 
                 _unitOfWork.Image.Add(new Image
                 {
-                    RelativePath = @"\images" + fileName,
+                    RelativePath = "/images/" + fileName,
                     ProductId = productId
                 });
             }

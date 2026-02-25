@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SolarSystem.DataAccess1;
 
@@ -10,9 +11,11 @@ using SolarSystem.DataAccess1;
 namespace SolarSystem.DataAccess1.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260221093849_ProjectCardAndTranslation")]
+    partial class ProjectCardAndTranslation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -53,92 +56,6 @@ namespace SolarSystem.DataAccess1.Migrations
                             Role = "MasterAdmin",
                             Username = "master_chief"
                         });
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.Customer", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Customers");
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.CustomerFeedBack", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CustomerId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
-
-                    b.ToTable("CustomerFeedBacks");
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.CustomerFeedbackTranslation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CustomerFeedbackId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FeedbackText")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("LanguageCode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerFeedbackId");
-
-                    b.ToTable("CustomerFeedbackTranslations");
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.CustomerTranslation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CustomerId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Job")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("LanguageCode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
-
-                    b.ToTable("CustomerTranslations");
                 });
 
             modelBuilder.Entity("SolarSystem.Models1.Models.Image", b =>
@@ -459,39 +376,6 @@ namespace SolarSystem.DataAccess1.Migrations
                         });
                 });
 
-            modelBuilder.Entity("SolarSystem.Models1.Models.CustomerFeedBack", b =>
-                {
-                    b.HasOne("SolarSystem.Models1.Models.Customer", "Customer")
-                        .WithMany("CustomerFeedBacks")
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Customer");
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.CustomerFeedbackTranslation", b =>
-                {
-                    b.HasOne("SolarSystem.Models1.Models.CustomerFeedBack", "CustomerFeedback")
-                        .WithMany("Translations")
-                        .HasForeignKey("CustomerFeedbackId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CustomerFeedback");
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.CustomerTranslation", b =>
-                {
-                    b.HasOne("SolarSystem.Models1.Models.Customer", "Customer")
-                        .WithMany("Translations")
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Customer");
-                });
-
             modelBuilder.Entity("SolarSystem.Models1.Models.Image", b =>
                 {
                     b.HasOne("SolarSystem.Models1.Models.Product", "Product")
@@ -545,18 +429,6 @@ namespace SolarSystem.DataAccess1.Migrations
                         .IsRequired();
 
                     b.Navigation("Section");
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.Customer", b =>
-                {
-                    b.Navigation("CustomerFeedBacks");
-
-                    b.Navigation("Translations");
-                });
-
-            modelBuilder.Entity("SolarSystem.Models1.Models.CustomerFeedBack", b =>
-                {
-                    b.Navigation("Translations");
                 });
 
             modelBuilder.Entity("SolarSystem.Models1.Models.Product", b =>

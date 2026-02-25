@@ -4,9 +4,9 @@ namespace SolarSystem.Models1.Models
 {
     public enum AdminRole
     {
-        Viewer=1,
-        Editor=2,
-        MasterAdmin=3 // The "God Mode" admin 👑
+        ViewAdmin = 1,
+        CreateDeleteAdmin = 2,
+        MasterAdmin = 3 // The "God Mode" admin 👑
     }
 
     public class Admin

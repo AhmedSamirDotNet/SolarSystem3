@@ -17,6 +17,13 @@ namespace SolarSystem.DataAccess1
         public DbSet<ProductTranslation> ProductTranslations { get; set; }
         public DbSet<SectionTranslation> SectionTranslations { get; set; }
         public DbSet<Image> Images { get; set; }
+        public DbSet<ProjectHomePageCard> ProjectHomePageCards { get; set; }
+        public DbSet<ProjectCardTranslation> ProjectCardTranslations { get; set; }
+        public DbSet<Customer> Customers { get; set; }
+        public DbSet<CustomerFeedBack> CustomerFeedBacks { get; set; }
+        public DbSet<CustomerTranslation> CustomerTranslations { get; set; }
+        public DbSet<CustomerFeedbackTranslation> CustomerFeedbackTranslations { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -69,6 +76,18 @@ namespace SolarSystem.DataAccess1
                 new Image { Id = 1, RelativePath = "/images/panel1.png", ProductId = 1 },
                 new Image { Id = 2, RelativePath = "/images/panel1.png", ProductId = 1 },
                 new Image { Id = 3, RelativePath = "/images/inverter1.jpg", ProductId = 2 }
+            );
+
+            modelBuilder.Entity<ProjectHomePageCard>().HasData(
+                new ProjectHomePageCard { Id = 1, ImageRelativePath = "/images/projects/project1.jpg" },
+                new ProjectHomePageCard { Id = 2, ImageRelativePath = "/images/projects/project2.jpg" }
+            );
+
+            modelBuilder.Entity<ProjectCardTranslation>().HasData(
+                new ProjectCardTranslation { Id = 1, ProjectCardId = 1, LanguageCode = "en", Title = "Residential Solar Install", LocationText = "Cairo, Egypt" },
+                new ProjectCardTranslation { Id = 2, ProjectCardId = 1, LanguageCode = "ar", Title = "تركيب خلايا شمسية سكنية", LocationText = "القاهرة، مصر" },
+                new ProjectCardTranslation { Id = 3, ProjectCardId = 2, LanguageCode = "en", Title = "Commercial Solar Farm", LocationText = "Alexandria, Egypt" },
+                new ProjectCardTranslation { Id = 4, ProjectCardId = 2, LanguageCode = "ar", Title = "مزرعة طاقة شمسية تجارية", LocationText = "الإسكندرية، مصر" }
             );
         }
     }
