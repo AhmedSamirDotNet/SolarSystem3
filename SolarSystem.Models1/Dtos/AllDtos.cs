@@ -249,7 +249,6 @@ namespace SolarSystem.Models1.Dtos
 
     public class UpdateProjectHomePageCardDto
     {
-        [Required]
         public int Id { get; set; }
         public string? ImageRelativePath { get; set; }
     }

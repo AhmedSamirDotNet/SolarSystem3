@@ -28,7 +28,7 @@ namespace SolarSystem.WebApi.Controllers
         {
             var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images,Section,Translations");
             if (product == null) return NotFound(new ErrorResponseDto { Message = "Product not found" });
-            return Ok(product.ToDetailDto());
+            return Ok(NormalizeProductDetailImageUrls(product.ToDetailDto()));
         }
 
         [HttpGet]
@@ -58,7 +58,9 @@ namespace SolarSystem.WebApi.Controllers
                 .ToList();
 
             // Map to language-aware DTO using extensions
-            var items = pagedData.Select(p => p.ToDto(lang)).ToList();
+            var items = pagedData
+                .Select(p => NormalizeProductDtoImageUrls(p.ToDto(lang)))
+                .ToList();
 
             var response = new ProductPagedResponseDto
             {
@@ -77,7 +79,7 @@ namespace SolarSystem.WebApi.Controllers
             var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images,Section,Translations");
             if (product == null) return NotFound(new ErrorResponseDto { Message = "المنتج غير موجود." });
 
-            return Ok(product.ToDto(lang));
+            return Ok(NormalizeProductDtoImageUrls(product.ToDto(lang)));
         }
 
         // Translation endpoints
@@ -109,6 +111,8 @@ namespace SolarSystem.WebApi.Controllers
         public IActionResult Create([FromForm] CreateProductDto createDto, [FromForm] string? TranslationsJson, List<IFormFile> files)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            files = ResolveFiles(files);
 
             var product = createDto.ToModel();
             _unitOfWork.Product.Add(product);
@@ -180,6 +184,8 @@ namespace SolarSystem.WebApi.Controllers
         {
             if (!ModelState.IsValid || updateDto.Id <= 0) return BadRequest(new ErrorResponseDto { Message = "بيانات غير صالحة." });
 
+            files = ResolveFiles(files);
+
             var objFromDb = _unitOfWork.Product.Get(u => u.Id == updateDto.Id, includeProperties: "Translations");
             if (objFromDb == null) return NotFound(new ErrorResponseDto { Message = "المنتج غير موجود." });
 
@@ -242,7 +248,6 @@ namespace SolarSystem.WebApi.Controllers
         {
             var product = _unitOfWork.Product.Get(u => u.Id == id, includeProperties: "Images");
             if (product == null) return NotFound(new ErrorResponseDto { Message = "Product not found" });
-
             foreach (var img in product.Images)
             {
                 string filePath = Path.Combine(_webHostEnvironment.WebRootPath, img.RelativePath.TrimStart('/'));
@@ -276,6 +281,73 @@ namespace SolarSystem.WebApi.Controllers
                     ProductId = productId
                 });
             }
+        }
+
+        private List<IFormFile> ResolveFiles(List<IFormFile>? files)
+        {
+            if (files != null && files.Count > 0)
+            {
+                return files;
+            }
+
+            var requestFiles = Request?.Form?.Files;
+            if (requestFiles == null || requestFiles.Count == 0)
+            {
+                return new List<IFormFile>();
+            }
+
+            var mapped = requestFiles
+                .Where(f => f.Name == "files" || f.Name == "files[]")
+                .ToList();
+
+            return mapped;
+        }
+
+        private ProductDto NormalizeProductDtoImageUrls(ProductDto dto)
+        {
+            if (dto.Images == null || dto.Images.Count == 0)
+            {
+                return dto;
+            }
+
+            foreach (var image in dto.Images)
+            {
+                image.RelativePath = ToAbsoluteImageUrl(image.RelativePath);
+            }
+
+            return dto;
+        }
+
+        private ProductDetailDto NormalizeProductDetailImageUrls(ProductDetailDto dto)
+        {
+            if (dto.Images == null || dto.Images.Count == 0)
+            {
+                return dto;
+            }
+
+            foreach (var image in dto.Images)
+            {
+                image.RelativePath = ToAbsoluteImageUrl(image.RelativePath);
+            }
+
+            return dto;
+        }
+
+        private string ToAbsoluteImageUrl(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return string.Empty;
+            }
+
+            if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                return path;
+            }
+
+            var normalized = path.StartsWith("/") ? path : $"/{path}";
+            return $"{Request.Scheme}://{Request.Host}{normalized}";
         }
     }
 }

@@ -27,7 +27,9 @@ namespace SolarSystem.WebApi.Controllers
         public IActionResult GetAll([FromQuery] string lang = "en")
         {
             var cards = _unitOfWork.ProjectCard.GetAll(includeProperties: "Translations");
-            var cardDtos = cards.Select(c => c.ToDto(lang)).ToList();
+            var cardDtos = cards
+                .Select(c => NormalizeProjectCardImageUrl(c.ToDto(lang)))
+                .ToList();
             return Ok(cardDtos);
         }
 
@@ -37,7 +39,7 @@ namespace SolarSystem.WebApi.Controllers
         {
             var card = _unitOfWork.ProjectCard.Get(c => c.Id == id, includeProperties: "Translations");
             if (card == null) return NotFound(new ErrorResponseDto { Message = "Project card not found" });
-            return Ok(card.ToDto(lang));
+            return Ok(NormalizeProjectCardImageUrl(card.ToDto(lang)));
         }
 
         [HttpGet("full/{id}")]
@@ -45,7 +47,7 @@ namespace SolarSystem.WebApi.Controllers
         {
             var card = _unitOfWork.ProjectCard.Get(c => c.Id == id, includeProperties: "Translations");
             if (card == null) return NotFound(new ErrorResponseDto { Message = "Project card not found" });
-            return Ok(card.ToDetailDto());
+            return Ok(NormalizeProjectCardDetailImageUrl(card.ToDetailDto()));
         }
 
         [HttpPost]
@@ -86,10 +88,37 @@ namespace SolarSystem.WebApi.Controllers
             return Ok(new SuccessResponseDto { Message = "Project card created successfully", Data = card.ToDetailDto() });
         }
 
-        [HttpPut]
+        [HttpPut("{id?}")]
         [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
-        public IActionResult Update([FromForm] UpdateProjectHomePageCardDto updateDto, [FromForm] string? TranslationsJson, IFormFile? file)
+        public IActionResult Update(int? id, [FromForm] UpdateProjectHomePageCardDto updateDto, [FromForm] string? TranslationsJson, IFormFile? file)
         {
+            if (updateDto.Id <= 0 && id.HasValue && id.Value > 0)
+            {
+                updateDto.Id = id.Value;
+                ModelState.Remove("Id");
+                ModelState.Remove("id");
+            }
+
+            // If model binding missed Id in multipart form, recover it manually
+            if (updateDto.Id <= 0)
+            {
+                var idRaw = Request.Form["Id"].FirstOrDefault()
+                    ?? Request.Form["id"].FirstOrDefault()
+                    ?? Request.Form["updateDto.Id"].FirstOrDefault()
+                    ?? Request.Form["updateDto.id"].FirstOrDefault();
+
+                if (int.TryParse(idRaw, out var parsedId) && parsedId > 0)
+                {
+                    updateDto.Id = parsedId;
+
+                    // Clear stale model-state errors for Id after manual recovery
+                    ModelState.Remove("Id");
+                    ModelState.Remove("id");
+                    ModelState.Remove("updateDto.Id");
+                    ModelState.Remove("updateDto.id");
+                }
+            }
+
             if (!ModelState.IsValid || updateDto.Id <= 0) return BadRequest(new ErrorResponseDto { Message = "Invalid data" });
 
             var card = _unitOfWork.ProjectCard.Get(c => c.Id == updateDto.Id, includeProperties: "Translations");
@@ -171,6 +200,35 @@ namespace SolarSystem.WebApi.Controllers
             }
 
             return relativePath;
+        }
+
+        private ProjectHomePageCardDto NormalizeProjectCardImageUrl(ProjectHomePageCardDto dto)
+        {
+            dto.ImageRelativePath = ToAbsoluteImageUrl(dto.ImageRelativePath);
+            return dto;
+        }
+
+        private ProjectCardDetailDto NormalizeProjectCardDetailImageUrl(ProjectCardDetailDto dto)
+        {
+            dto.ImageRelativePath = ToAbsoluteImageUrl(dto.ImageRelativePath);
+            return dto;
+        }
+
+        private string ToAbsoluteImageUrl(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return string.Empty;
+            }
+
+            if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                return path;
+            }
+
+            var normalized = path.StartsWith("/") ? path : $"/{path}";
+            return $"{Request.Scheme}://{Request.Host}{normalized}";
         }
     }
 }
