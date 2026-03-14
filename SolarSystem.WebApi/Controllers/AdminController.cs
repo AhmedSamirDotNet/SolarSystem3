@@ -42,7 +42,7 @@ namespace SolarSystem.WebApi.Controllers
             {
                 Username = createDto.Username,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(createDto.Password),
-                Role = AdminRole.ViewAdmin  // Changed default to ViewAdmin for safety
+                Role = createDto.Role ?? AdminRole.ViewAdmin
             };
 
             _unitOfWork.Admin.Add(newAdmin);

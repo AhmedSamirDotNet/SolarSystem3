@@ -1,3 +1,4 @@
+using SolarSystem.Models1.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace SolarSystem.Models1.Dtos
@@ -192,6 +193,7 @@ namespace SolarSystem.Models1.Dtos
         [Required]
         [StringLength(100, MinimumLength = 6)]
         public string Password { get; set; } = string.Empty;
+        public AdminRole? Role { get; set; }
 
     }
 
