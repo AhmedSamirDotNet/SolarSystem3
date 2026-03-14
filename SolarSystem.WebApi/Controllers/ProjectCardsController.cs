@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SolarSystem.DataAccess1.Repository.IRepository;
 using SolarSystem.Models1.Models;
@@ -52,6 +52,8 @@ namespace SolarSystem.WebApi.Controllers
 
         [HttpPost]
         [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
+        [HttpPost]
+        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
         public IActionResult Create([FromForm] CreateProjectHomePageCardDto createDto, [FromForm] string? TranslationsJson, IFormFile? file)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -60,32 +62,29 @@ namespace SolarSystem.WebApi.Controllers
 
             if (file != null)
             {
+                // تأكد من نوع الملف هنا قبل الرفع 👮‍♂️
                 card.ImageRelativePath = HandleImageUpload(file);
             }
 
             _unitOfWork.ProjectCard.Add(card);
-            _unitOfWork.Save();
+            _unitOfWork.Save(); // بنحفظ هنا عشان ناخد الـ ID للترجمات
 
             if (!string.IsNullOrWhiteSpace(TranslationsJson))
             {
-                try
+                var translations = JsonSerializer.Deserialize<List<ProjectCardTranslationDto>>(TranslationsJson);
+                if (translations != null)
                 {
-                    var translations = JsonSerializer.Deserialize<List<ProjectCardTranslationDto>>(TranslationsJson);
-                    if (translations != null)
+                    foreach (var trDto in translations)
                     {
-                        foreach (var trDto in translations)
-                        {
-                            var translation = trDto.ToModel();
-                            translation.ProjectCardId = card.Id;
-                            _unitOfWork.ProjectCardTranslation.Add(translation);
-                        }
-                        _unitOfWork.Save();
+                        var translation = trDto.ToModel();
+                        translation.ProjectCardId = card.Id;
+                        _unitOfWork.ProjectCardTranslation.Add(translation);
                     }
+                    _unitOfWork.Save();
                 }
-                catch (JsonException) { /* Fallback to default if needed */ }
             }
 
-            return Ok(new SuccessResponseDto { Message = "Project card created successfully", Data = card.ToDetailDto() });
+            return Ok(new SuccessResponseDto { Message = "تم إنشاء الكارد بنجاح 🚀", Data = card.ToDetailDto() });
         }
 
         [HttpPut("{id?}")]
