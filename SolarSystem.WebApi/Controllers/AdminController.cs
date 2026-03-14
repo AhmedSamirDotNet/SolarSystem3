@@ -76,14 +76,14 @@ namespace SolarSystem.WebApi.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
+        [Authorize(Roles = "MasterAdmin")]
         public IActionResult DeleteAdmin(int id)
         {
             var admin = _unitOfWork.Admin.Get(u => u.Id == id);
             if (admin == null) return NotFound(new ErrorResponseDto { Message = "Admin not found" });
 
-            if (admin.Role == AdminRole.MasterAdmin)
-                return BadRequest(new ErrorResponseDto { Message = "لا يمكن حذف الماستر أدمن" });
+            //if (admin.Role == AdminRole.MasterAdmin)
+            //    return BadRequest(new ErrorResponseDto { Message = "لا يمكن حذف الماستر أدمن" });
 
             _unitOfWork.Admin.Remove(admin);
             _unitOfWork.Save();
