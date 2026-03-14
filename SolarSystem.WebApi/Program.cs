@@ -19,10 +19,11 @@ builder.Services.AddControllers()
 #endregion
 
 #region Database
-var connString = builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-// بدل UseSqlServer هنكتب UseNpgsql
-
+var connString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(connString);
+});
 #endregion
 
 #region Unit Of Work
