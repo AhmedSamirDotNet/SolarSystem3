@@ -92,7 +92,6 @@ namespace SolarSystem.WebApi.Controllers
         [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
         public IActionResult Update(int? id, [FromForm] UpdateProjectHomePageCardDto updateDto, [FromForm] string? TranslationsJson, IFormFile? file)
         {
-            // --- بداية الكود الخاص باستخلاص الـ Id ---
             if (updateDto.Id <= 0 && id.HasValue && id.Value > 0)
             {
                 updateDto.Id = id.Value;
@@ -119,14 +118,12 @@ namespace SolarSystem.WebApi.Controllers
                     ModelState.Remove("updateDto.id");
                 }
             }
-            // --- نهاية الكود الخاص باستخلاص الـ Id ---
 
             if (!ModelState.IsValid || updateDto.Id <= 0) return BadRequest(new ErrorResponseDto { Message = "Invalid data" });
 
             var card = _unitOfWork.ProjectCard.Get(c => c.Id == updateDto.Id, includeProperties: "Translations");
             if (card == null) return NotFound(new ErrorResponseDto { Message = "Project card not found" });
 
-            // تحديث بيانات الكارد باستخدام الـ DTO الذي يحتوي الآن على بيانات العناوين
             card.UpdateFromDto(updateDto);
 
             if (file != null)
@@ -142,9 +139,6 @@ namespace SolarSystem.WebApi.Controllers
 
             _unitOfWork.ProjectCard.Update(card);
 
-            // --- معالجة الترجمات (إذا كنت لا تزال ترسلها) ---
-            // ملاحظة: هذه الطريقة في إرسال الترجمات معقدة. 
-            // الأفضل هو إرسالها في الـ DTO نفسه أو استخدام API منفصل للترجمات.
             if (!string.IsNullOrWhiteSpace(TranslationsJson))
             {
                 try
@@ -165,7 +159,6 @@ namespace SolarSystem.WebApi.Controllers
                 }
                 catch (JsonException) { }
             }
-            // --- نهاية معالجة الترجمات ---
 
             _unitOfWork.Save();
             return Ok(new SuccessResponseDto { Message = "Project card updated successfully" });
