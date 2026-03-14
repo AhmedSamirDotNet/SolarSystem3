@@ -1,318 +1,188 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
-using SolarSystem.DataAccess1.Repository.IRepository;
-using SolarSystem.Models1.Dtos;
-using SolarSystem.Models1.Extensions;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SolarSystem.DataAccess1;
 using SolarSystem.Models1.Models;
-using System.Text.Json;
+using System.ComponentModel.DataAnnotations;
 
 namespace SolarSystem.WebApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin,ViewAdmin")]
     public class ProjectCardsController : ControllerBase
     {
-        private readonly IUnitOfWork _unitOfWork;
-        private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly ApplicationDbContext _context; // استبدل بـ DbContext الخاص بك
 
-        public ProjectCardsController(IUnitOfWork unitOfWork, IWebHostEnvironment webHostEnvironment)
+        public ProjectCardsController(ApplicationDbContext context)
         {
-            _unitOfWork = unitOfWork;
-            _webHostEnvironment = webHostEnvironment;
+            _context = context;
         }
 
+        // GET: api/ProjectCards
         [HttpGet]
-        [AllowAnonymous]
-        public IActionResult GetAll([FromQuery] string lang = "en")
+        public async Task<ActionResult<IEnumerable<ProjectHomePageCard>>> GetAll()
         {
-            var cards = _unitOfWork.ProjectCard.GetAll(includeProperties: "Translations");
-            var cardDtos = cards
-                .Select(c => NormalizeProjectCardImageUrl(c.ToDto(lang)))
-                .ToList();
-            return Ok(cardDtos);
+            return await _context.ProjectHomePageCards
+                .Include(c => c.Translations)
+                .ToListAsync();
         }
 
+        // GET: api/ProjectCards/5
         [HttpGet("{id}")]
-        [AllowAnonymous]
-        public IActionResult Get(int id, [FromQuery] string lang = "en")
+        public async Task<ActionResult<ProjectHomePageCard>> Get(int id)
         {
-            var card = _unitOfWork.ProjectCard.Get(c => c.Id == id, includeProperties: "Translations");
-            if (card == null) return NotFound(new ErrorResponseDto { Message = "Project card not found" });
-            return Ok(NormalizeProjectCardImageUrl(card.ToDto(lang)));
+            var card = await _context.ProjectHomePageCards
+                .Include(c => c.Translations)
+                .FirstOrDefaultAsync(c => c.Id == id);
+
+            if (card == null)
+            {
+                return NotFound($"Project card with ID {id} not found.");
+            }
+
+            return card;
         }
 
-        [HttpGet("full/{id}")]
-        public IActionResult GetFull(int id)
-        {
-            var card = _unitOfWork.ProjectCard.Get(c => c.Id == id, includeProperties: "Translations");
-            if (card == null) return NotFound(new ErrorResponseDto { Message = "Project card not found" });
-            return Ok(NormalizeProjectCardDetailImageUrl(card.ToDetailDto()));
-        }
-
+        // POST: api/ProjectCards
         [HttpPost]
-        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
-        public IActionResult Create([FromForm] CreateProjectHomePageCardDto createDto, [FromForm] string? TranslationsJson, IFormFile? file)
+        public async Task<ActionResult<ProjectHomePageCard>> Create([FromBody] CreateProjectCardDto createDto)
         {
             if (!ModelState.IsValid)
-                return BadRequest(new ErrorResponseDto { Message = "Invalid data", Errors = GetModelStateErrors(ModelState) });
+                return BadRequest(ModelState);
 
-            var card = createDto.ToModel();
-
-            if (file != null)
+            // 1. إنشاء الكارد
+            var card = new ProjectHomePageCard
             {
-                card.ImageRelativePath = HandleImageUpload(file);
-            }
+                ImageRelativePath = createDto.ImageRelativePath ?? ""
+            };
 
-            _unitOfWork.ProjectCard.Add(card);
-            _unitOfWork.Save();
+            _context.ProjectHomePageCards.Add(card);
+            await _context.SaveChangesAsync(); // حفظ مؤقت للحصول على ID
 
-            if (!string.IsNullOrWhiteSpace(TranslationsJson))
+            // 2. إضافة الترجمات
+            if (createDto.Translations != null && createDto.Translations.Any())
             {
-                try
+                foreach (var transDto in createDto.Translations)
                 {
-                    var translations = JsonSerializer.Deserialize<List<ProjectCardTranslationDto>>(TranslationsJson);
-                    if (translations != null)
+                    var translation = new ProjectCardTranslation
                     {
-                        foreach (var trDto in translations)
-                        {
-                            var translation = trDto.ToModel();
-                            translation.ProjectCardId = card.Id;
-                            _unitOfWork.ProjectCardTranslation.Add(translation);
-                        }
-                        _unitOfWork.Save();
-                    }
+                        ProjectCardId = card.Id,
+                        LanguageCode = transDto.LanguageCode,
+                        Title = transDto.Title,
+                        LocationText = transDto.LocationText ?? ""
+                    };
+                    _context.ProjectCardTranslations.Add(translation);
                 }
-                catch (JsonException) { /* Fallback to default if needed */ }
+                await _context.SaveChangesAsync();
             }
 
-            return Ok(new SuccessResponseDto { Message = "Project card created successfully", Data = card.ToDetailDto() });
+            // إعادة الكارد بالترجمات
+            return CreatedAtAction(nameof(Get), new { id = card.Id }, card);
         }
 
-        [HttpPut("{id?}")]
-        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
-        public IActionResult Update(int? id, [FromForm] UpdateProjectHomePageCardDto updateDto, [FromForm] string? TranslationsJson, IFormFile? file)
+        // PUT: api/ProjectCards/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateProjectCardDto updateDto)
         {
-            // ========== هذا الجزء كان ناقص ==========
-            // استخلاص الـ ID من عدة مصادر
-            if (updateDto.Id <= 0 && id.HasValue && id.Value > 0)
-            {
-                updateDto.Id = id.Value;
-            }
+            if (id != updateDto.Id)
+                return BadRequest("ID mismatch");
 
-            // محاولة استخلاص الـ ID من الـ Form لو لسه مش موجود
-            if (updateDto.Id <= 0)
-            {
-                var idRaw = Request.Form["Id"].FirstOrDefault()
-                    ?? Request.Form["id"].FirstOrDefault()
-                    ?? Request.Form["updateDto.Id"].FirstOrDefault()
-                    ?? Request.Form["updateDto.id"].FirstOrDefault();
+            var card = await _context.ProjectHomePageCards
+                .Include(c => c.Translations)
+                .FirstOrDefaultAsync(c => c.Id == id);
 
-                if (int.TryParse(idRaw, out var parsedId) && parsedId > 0)
-                {
-                    updateDto.Id = parsedId;
-                }
-            }
-
-            // التحقق من صحة البيانات
-            if (updateDto.Id <= 0)
-            {
-                return BadRequest(new ErrorResponseDto { Message = "Invalid ID" });
-            }
-            // ========================================
-
-            var card = _unitOfWork.ProjectCard.Get(c => c.Id == updateDto.Id, includeProperties: "Translations");
             if (card == null)
-                return NotFound(new ErrorResponseDto { Message = "Project card not found" });
+                return NotFound($"Project card with ID {id} not found.");
 
-            bool hasUpdates = false;
+            // تحديث الصورة
+            if (updateDto.ImageRelativePath != null)
+                card.ImageRelativePath = updateDto.ImageRelativePath;
 
-            // تحديث الصورة فقط (لأنها الخاصية الوحيدة في الـ Model)
-            if (file != null)
+            // تحديث الترجمات
+            if (updateDto.Translations != null && updateDto.Translations.Any())
             {
-                if (!string.IsNullOrEmpty(card.ImageRelativePath))
+                foreach (var transDto in updateDto.Translations)
                 {
-                    string oldPath = Path.Combine(_webHostEnvironment.WebRootPath, card.ImageRelativePath.TrimStart('/'));
-                    if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
-                }
-                card.ImageRelativePath = HandleImageUpload(file);
-                hasUpdates = true;
-            }
+                    var existingTrans = card.Translations
+                        .FirstOrDefault(t => t.LanguageCode == transDto.LanguageCode);
 
-            // تحديث الترجمات من updateDto
-            if (!string.IsNullOrEmpty(updateDto.TitleEn) || !string.IsNullOrEmpty(updateDto.TitleAr) ||
-                updateDto.LocationEn != null || updateDto.LocationAr != null)
-            {
-                var translations = card.Translations.ToList();
-
-                // تحديث الترجمة الإنجليزية
-                var enTranslation = translations.FirstOrDefault(t => t.LanguageCode == "en");
-                if (enTranslation != null)
-                {
-                    if (!string.IsNullOrEmpty(updateDto.TitleEn))
-                        enTranslation.Title = updateDto.TitleEn;
-                    if (updateDto.LocationEn != null)
-                        enTranslation.LocationText = updateDto.LocationEn;
-                    _unitOfWork.ProjectCardTranslation.Update(enTranslation);
-                }
-                else if (!string.IsNullOrEmpty(updateDto.TitleEn))
-                {
-                    // إنشاء ترجمة جديدة لو مش موجودة
-                    enTranslation = new ProjectCardTranslation
+                    if (existingTrans != null)
                     {
-                        LanguageCode = "en",
-                        Title = updateDto.TitleEn,
-                        LocationText = updateDto.LocationEn ?? "",
-                        ProjectCardId = card.Id
-                    };
-                    _unitOfWork.ProjectCardTranslation.Add(enTranslation);
-                }
-
-                // تحديث الترجمة العربية
-                var arTranslation = translations.FirstOrDefault(t => t.LanguageCode == "ar");
-                if (arTranslation != null)
-                {
-                    if (!string.IsNullOrEmpty(updateDto.TitleAr))
-                        arTranslation.Title = updateDto.TitleAr;
-                    if (updateDto.LocationAr != null)
-                        arTranslation.LocationText = updateDto.LocationAr;
-                    _unitOfWork.ProjectCardTranslation.Update(arTranslation);
-                }
-                else if (!string.IsNullOrEmpty(updateDto.TitleAr))
-                {
-                    // إنشاء ترجمة جديدة لو مش موجودة
-                    arTranslation = new ProjectCardTranslation
+                        // تحديث موجود
+                        existingTrans.Title = transDto.Title;
+                        existingTrans.LocationText = transDto.LocationText ?? "";
+                    }
+                    else
                     {
-                        LanguageCode = "ar",
-                        Title = updateDto.TitleAr,
-                        LocationText = updateDto.LocationAr ?? "",
-                        ProjectCardId = card.Id
-                    };
-                    _unitOfWork.ProjectCardTranslation.Add(arTranslation);
-                }
-
-                hasUpdates = true;
-            }
-
-            // التعامل مع TranslationsJson للتوافق مع الإصدارات القديمة
-            if (!hasUpdates && !string.IsNullOrWhiteSpace(TranslationsJson))
-            {
-                try
-                {
-                    var translations = JsonSerializer.Deserialize<List<ProjectCardTranslationDto>>(TranslationsJson);
-                    if (translations != null && translations.Any())
-                    {
-                        foreach (var trDto in translations)
+                        // إضافة جديد
+                        var newTrans = new ProjectCardTranslation
                         {
-                            var existingTranslation = card.Translations
-                                .FirstOrDefault(t => t.LanguageCode == trDto.LanguageCode);
-
-                            if (existingTranslation != null)
-                            {
-                                existingTranslation.Title = trDto.Title;
-                                existingTranslation.LocationText = trDto.LocationText ?? "";
-                                _unitOfWork.ProjectCardTranslation.Update(existingTranslation);
-                            }
-                            else
-                            {
-                                var translation = trDto.ToModel();
-                                translation.ProjectCardId = card.Id;
-                                _unitOfWork.ProjectCardTranslation.Add(translation);
-                            }
-                        }
-                        hasUpdates = true;
+                            ProjectCardId = card.Id,
+                            LanguageCode = transDto.LanguageCode,
+                            Title = transDto.Title,
+                            LocationText = transDto.LocationText ?? ""
+                        };
+                        _context.ProjectCardTranslations.Add(newTrans);
                     }
                 }
-                catch (JsonException) { }
             }
 
-            if (!hasUpdates && file == null)
-            {
-                return BadRequest(new ErrorResponseDto { Message = "No data provided for update" });
-            }
-
-            _unitOfWork.ProjectCard.Update(card);
-            _unitOfWork.Save();
-
-            return Ok(new SuccessResponseDto { Message = "Project card updated successfully", Data = card.ToDetailDto() });
+            await _context.SaveChangesAsync();
+            return Ok(card);
         }
 
+        // DELETE: api/ProjectCards/5
         [HttpDelete("{id}")]
-        [Authorize(Roles = "MasterAdmin,CreateDeleteAdmin")]
-        public IActionResult Delete(int id)
+        public async Task<IActionResult> Delete(int id)
         {
-            var card = _unitOfWork.ProjectCard.Get(c => c.Id == id);
-            if (card == null) return NotFound(new ErrorResponseDto { Message = "Project card not found" });
+            var card = await _context.ProjectHomePageCards
+                .Include(c => c.Translations)
+                .FirstOrDefaultAsync(c => c.Id == id);
 
-            if (!string.IsNullOrEmpty(card.ImageRelativePath))
-            {
-                string filePath = Path.Combine(_webHostEnvironment.WebRootPath, card.ImageRelativePath.TrimStart('/'));
-                if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath);
-            }
+            if (card == null)
+                return NotFound($"Project card with ID {id} not found.");
 
-            _unitOfWork.ProjectCard.Remove(card);
-            _unitOfWork.Save();
+            // حذف الترجمات أولاً (EF Core ممكن تعملها automatically لو في Cascade Delete)
+            _context.ProjectCardTranslations.RemoveRange(card.Translations);
 
-            return Ok(new SuccessResponseDto { Message = "Project card deleted successfully" });
+            // حذف الكارد
+            _context.ProjectHomePageCards.Remove(card);
+
+            await _context.SaveChangesAsync();
+            return Ok($"Project card with ID {id} deleted successfully.");
         }
+    }
 
-        private string HandleImageUpload(IFormFile file)
-        {
-            string wwwRootPath = _webHostEnvironment.WebRootPath;
-            string projectsPath = Path.Combine(wwwRootPath, "images", "projects");
+    // ============ DTOs ============
 
-            if (!Directory.Exists(projectsPath))
-                Directory.CreateDirectory(projectsPath);
+    public class CreateProjectCardDto
+    {
+        public string? ImageRelativePath { get; set; }
 
-            string fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-            string relativePath = "/images/projects/" + fileName;
-            string fullPath = Path.Combine(projectsPath, fileName);
+        [Required]
+        public List<ProjectCardTranslationDto> Translations { get; set; } = new();
+    }
 
-            using (var fileStream = new FileStream(fullPath, FileMode.Create))
-            {
-                file.CopyTo(fileStream);
-            }
+    public class UpdateProjectCardDto
+    {
+        [Required]
+        public int Id { get; set; }
 
-            return relativePath;
-        }
+        public string? ImageRelativePath { get; set; }
 
-        private ProjectHomePageCardDto NormalizeProjectCardImageUrl(ProjectHomePageCardDto dto)
-        {
-            dto.ImageRelativePath = ToAbsoluteImageUrl(dto.ImageRelativePath);
-            return dto;
-        }
+        public List<ProjectCardTranslationDto>? Translations { get; set; }
+    }
 
-        private ProjectCardDetailDto NormalizeProjectCardDetailImageUrl(ProjectCardDetailDto dto)
-        {
-            dto.ImageRelativePath = ToAbsoluteImageUrl(dto.ImageRelativePath);
-            return dto;
-        }
+    public class ProjectCardTranslationDto
+    {
+        [Required]
+        [StringLength(10)]
+        public string LanguageCode { get; set; } = "en";
 
-        private string ToAbsoluteImageUrl(string? path)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-                return string.Empty;
+        [Required]
+        [StringLength(200)]
+        public string Title { get; set; } = string.Empty;
 
-            if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            {
-                return path;
-            }
-
-            var normalized = path.StartsWith("/") ? path : $"/{path}";
-            return $"{Request.Scheme}://{Request.Host}{normalized}";
-        }
-
-        // دالة مساعدة لعرض أخطاء ModelState
-        private Dictionary<string, string[]> GetModelStateErrors(ModelStateDictionary modelState)
-        {
-            return modelState
-                .Where(x => x.Value?.Errors.Count > 0)
-                .ToDictionary(
-                    kvp => kvp.Key,
-                    kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray() ?? Array.Empty<string>()
-                );
-        }
+        [StringLength(500)]
+        public string? LocationText { get; set; }
     }
 }
