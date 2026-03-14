@@ -1,4 +1,4 @@
-using SolarSystem.Models1.Models;
+﻿using SolarSystem.Models1.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace SolarSystem.Models1.Dtos
@@ -217,6 +217,9 @@ namespace SolarSystem.Models1.Dtos
     }
 
     // ============ PROJECT CARD DTOs ============
+    // ... الكود السابق ...
+
+    // ============ PROJECT CARD DTOs ============
 
     public class ProjectHomePageCardDto
     {
@@ -257,11 +260,24 @@ namespace SolarSystem.Models1.Dtos
         public string? LocationAr { get; set; }
     }
 
+    // ========== التعديل هنا ==========
     public class UpdateProjectHomePageCardDto
     {
         public int Id { get; set; }
         public string? ImageRelativePath { get; set; }
+
+        // إضافة خصائص العناوين للتحديث
+        [Required]
+        public string TitleEn { get; set; } = string.Empty;
+        public string? LocationEn { get; set; }
+
+        [Required]
+        public string TitleAr { get; set; } = string.Empty;
+        public string? LocationAr { get; set; }
     }
+    // =================================
+
+    // ... الكود التالي ...
 
     /// <summary>Generic Success Response DTO</summary>
     public class SuccessResponseDto
