@@ -1,4 +1,5 @@
-﻿using SolarSystem.Models1.Models;
+﻿using SolarSystem.Models1.Dtos;
+using SolarSystem.Models1.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace SolarSystem.Models1.Dtos
@@ -266,13 +267,10 @@ namespace SolarSystem.Models1.Dtos
         public int Id { get; set; }
         public string? ImageRelativePath { get; set; }
 
-        // إضافة خصائص العناوين للتحديث
-        [Required]
-        public string TitleEn { get; set; } = string.Empty;
+        // إزالة [Required] عشان نقدر نحدث جزئياً
+        public string? TitleEn { get; set; }
         public string? LocationEn { get; set; }
-
-        [Required]
-        public string TitleAr { get; set; } = string.Empty;
+        public string? TitleAr { get; set; }
         public string? LocationAr { get; set; }
     }
     // =================================
@@ -378,5 +376,45 @@ namespace SolarSystem.Models1.Dtos
 
         [Required(ErrorMessage = "Arabic feedback text is required")]
         public string? FeedbackAr { get; set; }
+    }
+}
+
+public static class ProjectCardExtensions
+{
+    public static ProjectHomePageCard ToModel(this CreateProjectHomePageCardDto dto)
+    {
+        var card = new ProjectHomePageCard
+        {
+            ImageRelativePath = dto.ImageRelativePath ?? ""
+        };
+
+        // إضافة الترجمات
+        card.Translations = new List<ProjectCardTranslation>
+        {
+            new ProjectCardTranslation
+            {
+                LanguageCode = "en",
+                Title = dto.TitleEn,
+                LocationText = dto.LocationEn ?? ""
+            },
+            new ProjectCardTranslation
+            {
+                LanguageCode = "ar",
+                Title = dto.TitleAr,
+                LocationText = dto.LocationAr ?? ""
+            }
+        };
+
+        return card;
+    }
+
+    public static void UpdateFromDto(this ProjectHomePageCard card, UpdateProjectHomePageCardDto dto)
+    {
+        // تحديث الصورة فقط لأنها الخاصية الوحيدة في الـ Model
+        if (!string.IsNullOrEmpty(dto.ImageRelativePath))
+            card.ImageRelativePath = dto.ImageRelativePath;
+
+        // تحديث الترجمات لازم يتم بشكل منفصل
+        // هذا الكود مش موجود هنا، بل في الـ Controller
     }
 }
