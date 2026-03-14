@@ -247,6 +247,14 @@ namespace SolarSystem.Models1.Dtos
     public class CreateProjectHomePageCardDto
     {
         public string? ImageRelativePath { get; set; }
+
+        [Required]
+        public string TitleEn { get; set; } = string.Empty;
+        public string? LocationEn { get; set; }
+
+        [Required]
+        public string TitleAr { get; set; } = string.Empty;
+        public string? LocationAr { get; set; }
     }
 
     public class UpdateProjectHomePageCardDto
