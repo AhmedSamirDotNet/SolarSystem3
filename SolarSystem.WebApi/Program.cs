@@ -18,11 +18,14 @@ builder.Services.AddControllers()
     });
 #endregion
 
-#region Database
+#region Database (PostgreSQL Migration) ✅
+// سحب الـ Connection String من الإعدادات
 var connString = builder.Configuration.GetConnectionString("DefaultConnection");
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    options.UseSqlServer(connString);
+    // تم التغيير من UseSqlServer إلى UseNpgsql
+    options.UseNpgsql(connString);
 });
 #endregion
 
@@ -66,7 +69,7 @@ builder.Services.AddCors(options =>
 });
 #endregion
 
-#region Swagger (Safe for Deployment)
+#region Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -77,7 +80,6 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Solar System Backend API"
     });
 
-    // JWT Support in Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -107,32 +109,41 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+#region Auto-Apply Migrations (اللمسة السحرية) 🪄
+// الجزء ده بيخلي الـ API يكريت الجداول في PostgreSQL لوحده أول ما يفتح
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        context.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating the database.");
+    }
+}
+#endregion
+
 #region Middleware Pipeline
 
-if (app.Environment.IsDevelopment())
+// نصيحة: خلي السواجر يفتح حتى في الـ Production عشان تعرف تختبر الـ API مبدئياً
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseDeveloperExceptionPage();
-
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Solar System API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Solar System API v1");
+    c.RoutePrefix = "swagger"; // هيفتح على domain.com/swagger
+});
 
 app.UseStaticFiles();
-
 app.UseRouting();
-
 app.UseCors("AllowFrontend");
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
-
-app.MapGet("/", () => "Solar System API is Running...");
+app.MapGet("/", () => "Solar System API is Running on PostgreSQL...");
 
 #endregion
 
