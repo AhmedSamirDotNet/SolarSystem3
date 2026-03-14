@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
   <Project Path="../SolarSystem.DataAccess1/SolarSystem.DataAccess1.csproj" />
   <Project Path="../SolarSystem.Models1/SolarSystem.Models1.csproj" />
   <Project Path="SolarSystem.WebApi.csproj" />
